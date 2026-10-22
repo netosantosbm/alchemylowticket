@@ -93,10 +93,40 @@ def convert_trend_to_product(trend_id: int, price: float = 27.0, db: Session = D
     # Mark trend as APPROVED
     trend.status = TrendStatus.APPROVED
 
+    # Check if a product already exists for this trend
+    existing_product = db.query(Product).filter(Product.trend_id == trend.id).first()
+    if existing_product:
+        db.commit()
+        return ProductResponse(
+            id=existing_product.id,
+            title=existing_product.title,
+            slug=existing_product.slug,
+            niche=existing_product.niche,
+            description=existing_product.description,
+            price=float(existing_product.price),
+            checkout_url=existing_product.checkout_url,
+            delivery_url=existing_product.delivery_url,
+            status=existing_product.status,
+            trend_id=existing_product.trend_id,
+            created_at=existing_product.created_at,
+            updated_at=existing_product.updated_at,
+            total_sales=0,
+            total_revenue=0.0
+        )
+
     # Generate initial product linked directly to this trend
     title = f"Apostila/Guia Prático: {trend.keyword.title()}"
     base_slug = slugify(trend.keyword)
     unique_slug = f"{base_slug}-{trend.id}"
+
+    # Ensure slug uniqueness against all products
+    slug_candidate = unique_slug
+    counter = 1
+    while db.query(Product).filter(Product.slug == slug_candidate).first():
+        counter += 1
+        slug_candidate = f"{unique_slug}-{counter}"
+    unique_slug = slug_candidate
+
     description = f"Infoproduto gerado da tendência '{trend.keyword}' no nicho {trend.niche}. Crescimento registrado: +{trend.trend_growth_pct}%."
 
     new_product = Product(

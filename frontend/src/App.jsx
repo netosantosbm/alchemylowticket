@@ -327,12 +327,18 @@ export default function App() {
         method: 'POST'
       })
       if (res.ok) {
-        const created = await res.json()
-        showToast(`💡 Sucesso! "${created.title}" adicionado ao Kanban`)
-        fetchData()
+        const product = await res.json()
+        const alreadyInList = products.some(p => p.id === product.id)
+        if (alreadyInList) {
+          showToast(`ℹ️ "${product.title}" já está no seu Kanban!`)
+        } else {
+          showToast(`💡 Sucesso! "${product.title}" adicionado ao Kanban`)
+        }
+        await fetchData()
         setActiveTab('products')
       } else {
-        showToast('Erro ao converter tendência em produto', 'error')
+        const err = await res.json().catch(() => ({}))
+        showToast(err.detail || 'Erro ao converter tendência em produto', 'error')
       }
     } catch (e) {
       showToast('Falha na requisição', 'error')
@@ -748,13 +754,27 @@ export default function App() {
                               <Lucide.Eye className="w-3.5 h-3.5" />
                               Espiar Anúncios
                             </button>
-                            <button
-                              onClick={() => handleConvertToProduct(item)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-700/20 transition active:scale-95"
-                            >
-                              <Lucide.Sparkles className="w-3.5 h-3.5" />
-                              Criar Produto
-                            </button>
+                            {products.some(p => p.trend_id === item.id) ? (
+                              <button
+                                onClick={() => {
+                                  setActiveTab('products')
+                                  showToast(`Visualizando produto no Kanban: "${item.keyword}"`)
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/50 transition active:scale-95 shadow-sm"
+                                title="Este produto já foi gerado e está no Kanban. Clique para gerenciar."
+                              >
+                                <Lucide.PackageCheck className="w-3.5 h-3.5 text-indigo-400" />
+                                Ver no Kanban
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleConvertToProduct(item)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-700/20 transition active:scale-95"
+                              >
+                                <Lucide.Sparkles className="w-3.5 h-3.5" />
+                                Criar Produto
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))
