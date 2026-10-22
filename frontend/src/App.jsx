@@ -95,6 +95,20 @@ export default function App() {
   })
   const [simResponse, setSimResponse] = useState(null)
 
+  // Kiwify Integration State
+  const [kiwifyConfig, setKiwifyConfig] = useState({
+    client_id: '',
+    client_secret: 'e9dd2a7ae973fc5fc1cb5b8cd71ffe98a2de73fb41b037993dff47763bd8ccc4',
+    account_id: '',
+    configured: false,
+    masked_secret: '',
+    updated_at: null
+  })
+  const [showKiwifySecret, setShowKiwifySecret] = useState(false)
+  const [kiwifySyncLoading, setKiwifySyncLoading] = useState(false)
+  const [kiwifyTestLoading, setKiwifyTestLoading] = useState(false)
+  const [kiwifySaveLoading, setKiwifySaveLoading] = useState(false)
+
   const showToast = (msg, type = 'success') => {
     setNotification({ msg, type })
     setTimeout(() => setNotification(null), 4000)
@@ -146,7 +160,109 @@ export default function App() {
 
   useEffect(() => {
     fetchData()
+    fetchKiwifyConfig()
   }, [trendNiche])
+
+  const fetchKiwifyConfig = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/integrations/kiwify`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.configured) {
+          setKiwifyConfig(prev => ({
+            ...prev,
+            client_id: data.client_id || '',
+            account_id: data.account_id || '',
+            configured: true,
+            masked_secret: data.masked_secret || '',
+            updated_at: data.updated_at
+          }))
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao carregar configs da Kiwify:', e)
+    }
+  }
+
+  const handleSaveKiwify = async (e) => {
+    if (e) e.preventDefault()
+    if (!kiwifyConfig.client_id || !kiwifyConfig.client_secret) {
+      showToast('Client ID e Client Secret são obrigatórios', 'error')
+      return
+    }
+    setKiwifySaveLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/integrations/kiwify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: kiwifyConfig.client_id,
+          client_secret: kiwifyConfig.client_secret,
+          account_id: kiwifyConfig.account_id || kiwifyConfig.client_id
+        })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        showToast('Configurações da Kiwify salvas com sucesso!')
+        fetchKiwifyConfig()
+      } else {
+        showToast(data.detail || 'Erro ao salvar credenciais', 'error')
+      }
+    } catch (err) {
+      showToast('Erro de comunicação com o servidor', 'error')
+    } finally {
+      setKiwifySaveLoading(false)
+    }
+  }
+
+  const handleTestKiwify = async () => {
+    if (!kiwifyConfig.client_id || !kiwifyConfig.client_secret) {
+      showToast('Preencha o Client ID e Client Secret para testar', 'error')
+      return
+    }
+    setKiwifyTestLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/integrations/kiwify/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: kiwifyConfig.client_id,
+          client_secret: kiwifyConfig.client_secret,
+          account_id: kiwifyConfig.account_id
+        })
+      })
+      const data = await res.json()
+      if (data.connected) {
+        showToast(data.message, 'success')
+      } else {
+        showToast(data.message || 'Falha ao conectar com a Kiwify', 'error')
+      }
+    } catch (e) {
+      showToast('Erro ao testar conexão com Kiwify', 'error')
+    } finally {
+      setKiwifyTestLoading(false)
+    }
+  }
+
+  const handleSyncKiwify = async () => {
+    setKiwifySyncLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/integrations/kiwify/sync`, {
+        method: 'POST'
+      })
+      const data = await res.json()
+      if (res.ok) {
+        showToast(`Sincronização concluída! ${data.total_found} produtos encontrados na Kiwify (${data.created_count} novos cadastrados, ${data.updated_count} atualizados).`, 'success')
+        fetchData()
+      } else {
+        showToast(data.detail || 'Erro ao sincronizar produtos da Kiwify', 'error')
+      }
+    } catch (e) {
+      showToast('Erro ao conectar com API da Kiwify', 'error')
+    } finally {
+      setKiwifySyncLoading(false)
+    }
+  }
 
   const handleMineTrends = async (niche = null) => {
     setMiningLoading(true)
@@ -435,6 +551,21 @@ export default function App() {
             <Lucide.Webhook className="w-4 h-4" />
             Simulador de Webhook
           </button>
+
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`flex items-center gap-2 py-3 px-4 text-sm font-semibold border-b-2 whitespace-nowrap transition ${
+              activeTab === 'settings'
+                ? 'border-emerald-400 text-emerald-400 bg-emerald-500/5'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Lucide.Settings className="w-4 h-4 text-amber-400" />
+            Configurações & APIs
+            {kiwifyConfig.configured ? (
+              <span className="ml-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            ) : null}
+          </button>
         </div>
       </header>
 
@@ -670,6 +801,16 @@ export default function App() {
                     Grade
                   </button>
                 </div>
+
+                <button
+                  onClick={handleSyncKiwify}
+                  disabled={kiwifySyncLoading}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-600/50 shadow-lg shadow-emerald-950/30 transition"
+                  title="Sincronizar produtos e links de checkout da Kiwify automaticamente"
+                >
+                  <Lucide.RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${kiwifySyncLoading ? 'animate-spin' : ''}`} />
+                  {kiwifySyncLoading ? 'Sincronizando...' : 'Puxar da Kiwify'}
+                </button>
 
                 <button
                   onClick={() => setIsModalOpen(true)}
@@ -1263,6 +1404,183 @@ export default function App() {
                   </pre>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* SETTINGS & API INTEGRATIONS TAB */}
+        {activeTab === 'settings' && (
+          <div className="space-y-8 animate-fadeIn">
+            {/* Header Description */}
+            <div className="glass-card p-6 rounded-2xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-heading font-bold text-white flex items-center gap-2">
+                  <Lucide.Cpu className="w-5 h-5 text-emerald-400" />
+                  Integrações de API e Conexão de Checkouts
+                </h2>
+                <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                  Configure suas credenciais para que a plataforma sincronize automaticamente seus produtos, puxe links de checkout oficiais e processe vendas sem necessidade de cadastros manuais.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">Status Geral:</span>
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  API Pronta
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* KIWIFY API CARD */}
+              <div className="lg:col-span-2 glass-card p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between pb-4 mb-6 border-b border-slate-800">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center font-bold text-emerald-400 text-lg">
+                        K
+                      </div>
+                      <div>
+                        <h3 className="font-heading font-bold text-base text-white flex items-center gap-2">
+                          Kiwify (API Oficial OAuth 2.0)
+                        </h3>
+                        <p className="text-xs text-slate-400">Sincronização direta de produtos e checkouts</p>
+                      </div>
+                    </div>
+
+                    {kiwifyConfig.configured ? (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1.5">
+                        <Lucide.CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        Conectado
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-950 text-amber-300 border border-amber-800 flex items-center gap-1.5">
+                        <Lucide.AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                        Aguardando Chaves
+                      </span>
+                    )}
+                  </div>
+
+                  <form onSubmit={handleSaveKiwify} className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                        <span>Client ID (ID da API Key da Kiwify) *</span>
+                        <span className="text-[10px] text-slate-500">Exibido na tela de API da Kiwify</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: 8a7b9c6d-5e4f-3a2b-1c0d-..."
+                        value={kiwifyConfig.client_id}
+                        onChange={(e) => setKiwifyConfig({ ...kiwifyConfig, client_id: e.target.value })}
+                        className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                        <span>Client Secret (Chave Secreta) *</span>
+                        <button
+                          type="button"
+                          onClick={() => setShowKiwifySecret(!showKiwifySecret)}
+                          className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
+                        >
+                          {showKiwifySecret ? <Lucide.EyeOff className="w-3 h-3" /> : <Lucide.Eye className="w-3 h-3" />}
+                          {showKiwifySecret ? 'Ocultar' : 'Mostrar'}
+                        </button>
+                      </label>
+                      <input
+                        type={showKiwifySecret ? "text" : "password"}
+                        placeholder="Cole o Client Secret (64 caracteres)..."
+                        value={kiwifyConfig.client_secret}
+                        onChange={(e) => setKiwifyConfig({ ...kiwifyConfig, client_secret: e.target.value })}
+                        className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+                        <span>Account ID (Opcional)</span>
+                        <span className="text-[10px] text-slate-500">Geralmente idêntico ao Client ID</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Opcional (preenchido automaticamente)"
+                        value={kiwifyConfig.account_id}
+                        onChange={(e) => setKiwifyConfig({ ...kiwifyConfig, account_id: e.target.value })}
+                        className="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono transition"
+                      />
+                    </div>
+
+                    <div className="pt-2 flex flex-wrap items-center gap-3">
+                      <button
+                        type="submit"
+                        disabled={kiwifySaveLoading}
+                        className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-lg shadow-emerald-600/30 transition"
+                      >
+                        <Lucide.Save className="w-4 h-4" />
+                        {kiwifySaveLoading ? 'Salvando...' : 'Salvar Credenciais'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleTestKiwify}
+                        disabled={kiwifyTestLoading}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition"
+                      >
+                        <Lucide.Plug className={`w-4 h-4 ${kiwifyTestLoading ? 'animate-spin' : 'text-emerald-400'}`} />
+                        {kiwifyTestLoading ? 'Testando...' : 'Testar Conexão'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleSyncKiwify}
+                        disabled={kiwifySyncLoading}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-600/40 text-xs font-semibold ml-auto transition"
+                      >
+                        <Lucide.RefreshCw className={`w-4 h-4 text-emerald-400 ${kiwifySyncLoading ? 'animate-spin' : ''}`} />
+                        {kiwifySyncLoading ? 'Sincronizando...' : 'Sincronizar Produtos Agora'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+                  <span>As credenciais são gravadas de forma criptografada na tabela de configurações.</span>
+                  {kiwifyConfig.updated_at && (
+                    <span className="text-slate-500">Última atualização: {new Date(kiwifyConfig.updated_at).toLocaleDateString('pt-BR')}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* TUTORIAL & HELP CARD */}
+              <div className="space-y-6">
+                <div className="glass-card p-6 rounded-2xl border border-slate-800 bg-slate-900/60">
+                  <h4 className="font-heading font-bold text-sm text-white flex items-center gap-2 mb-3">
+                    <Lucide.HelpCircle className="w-4 h-4 text-emerald-400" />
+                    Onde achar na Kiwify:
+                  </h4>
+                  <ol className="space-y-2.5 text-xs text-slate-300 leading-relaxed list-decimal list-inside">
+                    <li>Acesse seu painel em <strong className="text-white">dashboard.kiwify.com.br</strong></li>
+                    <li>No menu lateral esquerdo, clique em <strong className="text-emerald-400">Apps ➔ API</strong></li>
+                    <li>Clique no botão verde <strong className="text-white">Criar API Key</strong></li>
+                    <li>Copie o <strong className="text-white">Client ID</strong> e o <strong className="text-white">Client Secret</strong></li>
+                    <li>Cole aqui nos campos e clique em Salvar!</li>
+                  </ol>
+                </div>
+
+                <div className="glass-card p-6 rounded-2xl border border-slate-800">
+                  <h4 className="font-heading font-bold text-sm text-white flex items-center gap-2 mb-2">
+                    <Lucide.ShieldCheck className="w-4 h-4 text-teal-400" />
+                    Webhooks das Plataformas
+                  </h4>
+                  <p className="text-xs text-slate-400 mb-3">
+                    URL universal para Kiwify, Hotmart, Eduzz e Braip:
+                  </p>
+                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] text-emerald-400 break-all select-all">
+                    https://alchemylow.shop/api/webhooks/order
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}

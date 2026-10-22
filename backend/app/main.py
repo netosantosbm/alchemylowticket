@@ -13,7 +13,7 @@ from models import (
     Platform,
     OrderStatus
 )
-from app.routers import trends, products, orders, webhooks, competitors
+from app.routers import trends, products, orders, webhooks, competitors, integrations
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -201,6 +201,7 @@ app.include_router(products.router)
 app.include_router(orders.router)
 app.include_router(webhooks.router)
 app.include_router(competitors.router)
+app.include_router(integrations.router)
 
 @app.get("/api/health")
 def api_health():
