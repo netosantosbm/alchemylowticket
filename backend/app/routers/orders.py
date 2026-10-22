@@ -134,13 +134,11 @@ def get_sales_chart_data(db: Session = Depends(get_db)):
 
 @router.delete("/test-data")
 def clear_test_orders(db: Session = Depends(get_db)):
-    """Permite ao usuário limpar transações de teste quando for rodar vendas reais."""
-    deleted = db.query(Order).filter(
-        (Order.external_order_id.like("TEST-%")) | 
-        (Order.external_order_id.like("SIM-%"))
-    ).delete(synchronize_session=False)
+    """Permite ao usuário limpar todas as transações de teste e demonstração para iniciar com dados reais."""
+    deleted = db.query(Order).delete(synchronize_session=False)
     db.commit()
-    return {"message": f"{deleted} pedidos de teste removidos com sucesso", "deleted_count": deleted}
+    return {"message": f"{deleted} pedidos de teste removidos com sucesso. Painel zerado!", "deleted_count": deleted}
+
 
 @router.post("", response_model=OrderResponse)
 def create_manual_order(order_in: OrderCreate, db: Session = Depends(get_db)):
