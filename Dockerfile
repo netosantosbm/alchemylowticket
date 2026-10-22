@@ -19,7 +19,7 @@ FROM python:3.11-slim AS production
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV FRONTEND_DIST=/app/frontend_dist
-ENV PORT=8000
+ENV PORT=8050
 ENV HOST=0.0.0.0
 
 WORKDIR /app
@@ -44,11 +44,12 @@ COPY backend/app ./app
 COPY --from=frontend-builder /build/dist /app/frontend_dist
 
 # Porta padrão de escuta
-EXPOSE 8000
+EXPOSE 8050
 
 # Healthcheck interno
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://127.0.0.1:8000/api/health || exit 1
+  CMD curl -f http://127.0.0.1:${PORT:-8050}/api/health || exit 1
 
-# Comando de inicialização
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Comando de inicialização com expansão dinâmica de $PORT
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8050} --workers 2"]
+
