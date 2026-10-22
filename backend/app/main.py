@@ -202,13 +202,61 @@ app.include_router(orders.router)
 app.include_router(webhooks.router)
 app.include_router(competitors.router)
 
-@app.get("/")
-def root():
+@app.get("/api/health")
+def api_health():
     return {
         "app": "Plataforma LowTicket API",
         "version": "2.0.0",
         "status": "online",
         "database_target": "Supabase PostgreSQL Ready",
-        "models_schema": "models.py",
         "docs_url": "/docs"
     }
+
+# Static Frontend SPA serving (for Docker / Easypanel container deployment)
+import os
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from fastapi import HTTPException
+
+# Detect frontend dist location (Docker container or local workspace)
+frontend_dist = os.environ.get("FRONTEND_DIST")
+if not frontend_dist or not os.path.exists(frontend_dist):
+    # Check Docker path
+    if os.path.exists("/app/frontend_dist"):
+        frontend_dist = "/app/frontend_dist"
+    else:
+        # Check relative local repo path
+        local_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../frontend/dist"))
+        if os.path.exists(local_dist):
+            frontend_dist = local_dist
+
+if frontend_dist and os.path.exists(os.path.join(frontend_dist, "index.html")):
+    assets_dir = os.path.join(frontend_dist, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/")
+    async def serve_index():
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # Prevent hijacking API, docs, and schema endpoints
+        if full_path.startswith("api") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
+            raise HTTPException(status_code=404, detail="API route not found")
+        target_path = os.path.join(frontend_dist, full_path)
+        if os.path.isfile(target_path):
+            return FileResponse(target_path)
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
+else:
+    @app.get("/")
+    def root():
+        return {
+            "app": "Plataforma LowTicket API",
+            "version": "2.0.0",
+            "status": "online",
+            "database_target": "Supabase PostgreSQL Ready",
+            "models_schema": "models.py",
+            "docs_url": "/docs"
+        }
+

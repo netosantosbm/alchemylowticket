@@ -1,0 +1,10 @@
+.git
+.github
+**/node_modules
+**/venv
+**/.env
+**/__pycache__
+**/.pytest_cache
+**/.system_generated
+**/.user_uploaded
+deploy/

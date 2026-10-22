@@ -39,28 +39,68 @@ HOST=0.0.0.0
 
 ---
 
-## 3. Preparando a VPS (Ubuntu/Debian)
+## 3. Atenção: Servidor com Docker e Easypanel
 
-### 3.1. Acesso SSH à VPS:
+> ⚠️ **IMPORTANTE:** Como você já tem o **Easypanel e Docker** rodando na VPS, o Easypanel já gerencia as portas 80 e 443 via Traefik. **NÃO** instale o Nginx diretamente no sistema operacional raiz para evitar conflitos!
+>
+> **A melhor e mais segura forma** é rodar a Plataforma LowTicket diretamente como uma aplicação no Easypanel (ou container Docker isolado). Ela terá SSL automático, sem conflitar com nada!
+
+---
+
+## 4. Corrigir os Avisos do Terminal da HostGator (dpkg e hostname)
+
+Na VPS, execute estes dois comandos para destravar o gerenciador de pacotes e resolver o aviso de hostname da HostGator:
+
 ```bash
-ssh root@IP_DA_SUA_VPS
+# 1. Corrige o aviso 'unable to resolve host' no /etc/hosts
+echo "127.0.0.1 $(hostname)" | sudo tee -a /etc/hosts
+
+# 2. Destrava e conclui a instalação pendente do apt/dpkg
+sudo dpkg --configure -a
 ```
 
-### 3.2. Instalar Pacotes Essenciais:
+---
+
+## 5. Método Recomendado: Deploy no Easypanel (Zero Conflitos)
+
+Como o Easypanel já está ativo na sua VPS:
+
+1. **Acesse seu painel do Easypanel** no navegador (`http://IP_DA_SUA_VPS:3000` ou pelo domínio do seu painel).
+2. Clique em **"+ Project"** e digite o nome: `plataforma-lowticket` (ou use um projeto existente).
+3. Dentro do projeto, clique em **"+ Service"** ➔ **"App"**.
+4. Na aba **Source**:
+   - **Opção Git:** Aponte para o repositório Git do projeto. O Easypanel detectará o `Dockerfile` automaticamente!
+   - **Opção Docker Image / Compose:** Você também pode subir via Git com o `Dockerfile` multi-estágio já incluso.
+5. Na aba **Environment**:
+   Adicione as variáveis de ambiente:
+   - `DATABASE_URL`: `postgresql://postgres.vwiplqpczlounotnzlll:Ch4k%40l1440Anu@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require`
+   - `DOMAIN`: `alchemylow.shop`
+   - `PORT`: `8000`
+   - `HOST`: `0.0.0.0`
+6. Na aba **Domains**:
+   - Adicione o domínio: `alchemylow.shop`
+   - Porta interna: `8000`
+   - *(O Easypanel irá gerar o certificado SSL HTTPS automaticamente via Let's Encrypt!)*
+7. Clique em **"Deploy"**.
+
+---
+
+## 6. Método Alternativo: Docker Compose Direto na VPS
+
+Se preferir rodar via linha de comando com o Docker que já está instalado:
+
 ```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y python3 python3-venv python3-pip git nginx certbot python3-certbot-nginx nodejs npm rsync
+# 1. Enviar arquivos do Mac para a VPS:
+rsync -avz --exclude 'venv' --exclude 'node_modules' --exclude '.git' "/Users/macintosh/Desktop/Geral iCloud/AlchemyTech/Plataforma LowTicket/" root@IP_DA_SUA_VPS:/root/plataforma-lowticket/
+
+# 2. Na VPS, subir o container:
+cd /root/plataforma-lowticket
+docker compose up -d --build
 ```
 
-### 3.3. Enviar os Arquivos para a VPS
+---
 
-**Opção A (Via Git):**
-```bash
-mkdir -p /var/www/alchemylow
-cd /var/www/alchemylow
-# Se você tiver enviado para o GitHub:
-git clone https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git .
-```
+## 7. Método Tradicional (Apenas para VPS Limpa sem Easypanel)
 
 **Opção B (Envio Direto do seu Mac via rsync - Sem precisar do GitHub):**
 Execute este comando no terminal do seu **Mac** (substitua `IP_DA_SUA_VPS` pelo IP real):
