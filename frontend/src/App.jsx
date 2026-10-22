@@ -1056,7 +1056,7 @@ export default function App() {
 
                   <div className="h-52 w-full">
                     <ResponsiveContainer width="100%" height="100%">
-                      <RechartsBarChart data={platformChartData}>
+                      <BarChart data={platformChartData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                         <XAxis dataKey="name" stroke="#64748b" fontSize={10} />
                         <YAxis stroke="#64748b" fontSize={10} allowDecimals={false} />
@@ -1068,7 +1068,7 @@ export default function App() {
                             <Cell key={`cell-${index}`} fill={entry.color} />
                           ))}
                         </Bar>
-                      </RechartsBarChart>
+                      </BarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
