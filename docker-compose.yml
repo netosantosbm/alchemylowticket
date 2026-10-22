@@ -11,8 +11,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres.vwiplqpczlounotnzlll:Ch4k%40l1440Anu@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require
-      - DOMAIN=alchemylow.shop
+      - DATABASE_URL=${DATABASE_URL}
+      - DOMAIN=${DOMAIN:-alchemylow.shop}
       - PORT=8000
       - HOST=0.0.0.0
     healthcheck:

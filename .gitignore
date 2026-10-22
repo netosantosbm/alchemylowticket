@@ -14,8 +14,10 @@ frontend/dist/
 frontend/.vite/
 
 # Environment Variables & Secrets
-# Descomente a linha abaixo caso queira proteger seu .env no git público:
-# backend/.env
+backend/.env
+.env
+*.env
+
 
 # macOS
 .DS_Store
