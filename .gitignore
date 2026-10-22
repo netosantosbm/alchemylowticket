@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+backend/venv/
+backend/app/lowticket.db
+backend/app/*.db
+*.sqlite3
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Environment Variables & Secrets
+# Descomente a linha abaixo caso queira proteger seu .env no git público:
+# backend/.env
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# IDEs
+.idea/
+.vscode/
+*.swp
