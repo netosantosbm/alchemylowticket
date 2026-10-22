@@ -22,59 +22,71 @@ No painel do cliente da HostGator (Gerenciador de DNS do domínio `alchemylow.sh
 
 ---
 
-## 2. Configurar o Banco de Dados no Supabase
+## 2. Banco de Dados Supabase (Já Configurado e Ativo! ✅)
 
-1. Crie uma conta gratuita em [supabase.com](https://supabase.com).
-2. Clique em **"New Project"**, dê o nome (ex: `alchemy-lowticket`), defina uma senha forte para o banco e selecione a região **São Paulo (sa-east-1)**.
-3. No painel do projeto Supabase:
-   - Vá em **Project Settings** (ícone de engrenagem) ➔ **Database**.
-   - Role até a seção **Connection String** e selecione a aba **URI**.
-   - Copie a URL. Se for usar o Connection Pooler (porta 6543, recomendada para VPS):
-     ```
-     postgresql://postgres.[PROJECT-REF]:[SUA-SENHA]@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode=require
-     ```
-4. Na sua VPS (ou no arquivo `backend/.env`), adicione:
-   ```env
-   DATABASE_URL="postgresql://postgres.[PROJECT-REF]:[SUA-SENHA]@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?sslmode=require"
-   ```
-5. **Zero Migração Manual:** Quando o FastAPI iniciar na VPS pela primeira vez, o SQLAlchemy criará automaticamente todas as tabelas (`market_trends`, `products`, `orders`) no Supabase!
+O banco de dados já está provisionado, conectado e com as tabelas criadas no projeto Supabase `vwiplqpczlounotnzlll`.
+
+Na sua VPS, o arquivo `/var/www/alchemylow/backend/.env` deve conter exatamente:
+```env
+# Conexão Supabase Pooler (Testada e Homologada)
+DATABASE_URL="postgresql://postgres.vwiplqpczlounotnzlll:Ch4k%40l1440Anu@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require"
+
+# Domínio e Servidor
+DOMAIN=alchemylow.shop
+PORT=8000
+HOST=0.0.0.0
+```
 
 ---
 
 ## 3. Preparando a VPS (Ubuntu/Debian)
 
-Acesse a VPS via terminal SSH:
+### 3.1. Acesso SSH à VPS:
 ```bash
 ssh root@IP_DA_SUA_VPS
 ```
 
-Instale os pacotes necessários:
+### 3.2. Instalar Pacotes Essenciais:
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y python3 python3-venv python3-pip git nginx certbot python3-certbot-nginx nodejs npm
+sudo apt install -y python3 python3-venv python3-pip git nginx certbot python3-certbot-nginx nodejs npm rsync
 ```
 
-### 3.1. Clonar ou Enviar o Projeto para `/var/www/alchemylow`
+### 3.3. Enviar os Arquivos para a VPS
+
+**Opção A (Via Git):**
 ```bash
 mkdir -p /var/www/alchemylow
 cd /var/www/alchemylow
-# Se usar Git:
-# git clone <URL_DO_SEU_REPOSITORIO> .
+# Se você tiver enviado para o GitHub:
+git clone https://github.com/SEU_USUARIO/SEU_REPOSITORIO.git .
 ```
 
-### 3.2. Configurar o Backend
+**Opção B (Envio Direto do seu Mac via rsync - Sem precisar do GitHub):**
+Execute este comando no terminal do seu **Mac** (substitua `IP_DA_SUA_VPS` pelo IP real):
+```bash
+rsync -avz --exclude 'venv' --exclude 'node_modules' --exclude '.git' "/Users/macintosh/Desktop/Geral iCloud/AlchemyTech/Plataforma LowTicket/" root@IP_DA_SUA_VPS:/var/www/alchemylow/
+```
+
+---
+
+### 3.4. Configurar o Backend na VPS
 ```bash
 cd /var/www/alchemylow/backend
 python3 -m venv venv
 venv/bin/pip install --upgrade pip
 venv/bin/pip install -r requirements.txt
 
-# Crie o arquivo .env com a URL do Supabase
-nano .env
-# Cole o conteúdo com DATABASE_URL e salve (CTRL+O, ENTER, CTRL+X)
+# Criar o arquivo .env
+cat << 'EOF' > /var/www/alchemylow/backend/.env
+DATABASE_URL="postgresql://postgres.vwiplqpczlounotnzlll:Ch4k%40l1440Anu@aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require"
+DOMAIN=alchemylow.shop
+PORT=8000
+HOST=0.0.0.0
+EOF
 ```
 
-### 3.3. Compilar o Frontend para Produção
+### 3.5. Compilar o Frontend para Produção
 ```bash
 cd /var/www/alchemylow/frontend
 npm install
@@ -82,7 +94,7 @@ npm run build
 # A pasta /var/www/alchemylow/frontend/dist será gerada automaticamente
 ```
 
-### 3.4. Configurar o Serviço do Backend (Systemd)
+### 3.6. Configurar o Serviço do Backend (Systemd)
 ```bash
 sudo cp /var/www/alchemylow/deploy/lowticket-backend.service /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -91,7 +103,7 @@ sudo systemctl start lowticket-backend
 sudo systemctl status lowticket-backend
 ```
 
-### 3.5. Configurar o Servidor Web Nginx
+### 3.7. Configurar o Servidor Web Nginx
 ```bash
 sudo cp /var/www/alchemylow/deploy/nginx.conf /etc/nginx/sites-available/alchemylow.shop
 sudo ln -s /etc/nginx/sites-available/alchemylow.shop /etc/nginx/sites-enabled/
@@ -99,7 +111,7 @@ sudo nginx -t
 sudo systemctl restart nginx
 ```
 
-### 3.6. Gerar Certificado SSL Gratuito (HTTPS)
+### 3.8. Gerar Certificado SSL Gratuito (HTTPS)
 ```bash
 sudo certbot --nginx -d alchemylow.shop -d www.alchemylow.shop
 ```
