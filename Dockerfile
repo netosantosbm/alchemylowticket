@@ -43,13 +43,12 @@ COPY backend/app ./app
 # Copia os arquivos compilados do frontend do estágio 1
 COPY --from=frontend-builder /build/dist /app/frontend_dist
 
+# Otimizações de memória para VPS enxuta
+ENV MALLOC_TRIM_THRESHOLD_=100000
+ENV PYTHONMALLOC=malloc
+
 # Porta padrão de escuta
 EXPOSE 8050
 
-# Healthcheck interno
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://127.0.0.1:${PORT:-8050}/api/health || exit 1
-
-# Comando de inicialização com expansão dinâmica de $PORT
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8050} --workers 2"]
-
+# Comando de inicialização otimizado para baixo consumo de RAM (1 worker assíncrono)
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8050} --workers 1"]
