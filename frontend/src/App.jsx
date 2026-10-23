@@ -568,15 +568,18 @@ export default function App() {
   }
 
   const handleDeleteProduct = async (productId) => {
-    if (!window.confirm('Deseja realmente remover este produto do catálogo?')) return
+    if (!window.confirm('Deseja realmente remover este infoproduto do catálogo?')) return
     try {
       const res = await fetch(`${API_BASE}/products/${productId}`, { method: 'DELETE' })
       if (res.ok) {
         showToast('Produto removido com sucesso')
         fetchData()
+      } else {
+        const errData = await res.json().catch(() => ({}))
+        showToast(errData.detail || 'Erro ao remover produto', 'error')
       }
     } catch (e) {
-      showToast('Erro ao remover produto', 'error')
+      showToast('Erro de conexão ao remover produto', 'error')
     }
   }
 

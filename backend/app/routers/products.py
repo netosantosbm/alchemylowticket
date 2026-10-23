@@ -167,6 +167,11 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
+    
+    # Desvincula pedidos associados antes de deletar para evitar erro de chave estrangeira
+    db.query(Order).filter(Order.product_id == product_id).update({Order.product_id: None})
+    
     db.delete(product)
     db.commit()
     return {"message": "Produto removido com sucesso"}
+

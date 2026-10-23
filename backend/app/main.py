@@ -20,9 +20,15 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("lowticket-api")
 
 def seed_initial_data():
-    """Seed initial realistic data matching the Supabase schema."""
+    """Seed initial realistic data matching the Supabase schema (apenas uma vez)."""
     db = SessionLocal()
     try:
+        # Verifica se o seed inicial já foi executado. Se sim, respeita os dados e exclusões do usuário!
+        already_seeded = db.query(AppSetting).filter(AppSetting.key == "system_initial_seed").first()
+        if already_seeded:
+            logger.info("Seed inicial já executado anteriormente. Preservando exclusões e estado do banco.")
+            return
+
         # Check if trends exist
         if db.query(MarketTrend).count() == 0:
             logger.info("Populando tendências iniciais (schema Supabase)...")
@@ -165,6 +171,11 @@ def seed_initial_data():
                 payload_raw={"source": "seed"}
             )
             db.add_all([o1, o2, o3])
+            db.commit()
+
+        # Marca permanentemente no banco Supabase que o seed inicial já foi feito
+        if not db.query(AppSetting).filter(AppSetting.key == "system_initial_seed").first():
+            db.add(AppSetting(key="system_initial_seed", value={"completed": True}))
             db.commit()
 
     except Exception as e:
