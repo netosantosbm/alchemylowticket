@@ -7,6 +7,10 @@ WORKDIR /build
 COPY frontend/package*.json ./
 RUN npm ci
 
+# Força invalidação total de cache do frontend para novos deploys
+ARG CACHEBUST=20261022_v4
+ENV CACHEBUST=$CACHEBUST
+
 COPY frontend/ ./
 RUN npm run build
 
@@ -35,6 +39,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
+
+# Força invalidação de cache do backend para código novo
+ARG BACKEND_BUST=20261022_v4
+ENV BACKEND_BUST=$BACKEND_BUST
 
 # Copia código do backend e modelos
 COPY backend/models.py ./models.py
