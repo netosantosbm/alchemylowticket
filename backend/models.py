@@ -106,6 +106,9 @@ class Product(Base):
         index=True
     )
     
+    # Anúncios e copys geradas por IA para este produto
+    ad_copies: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
     # FK opcional apontando para a tendência que gerou este produto
     trend_id: Mapped[Optional[int]] = mapped_column(ForeignKey("market_trends.id"), nullable=True)
     origin_trend: Mapped[Optional["MarketTrend"]] = relationship(back_populates="products")

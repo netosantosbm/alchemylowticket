@@ -109,6 +109,30 @@ export default function App() {
   const [kiwifyTestLoading, setKiwifyTestLoading] = useState(false)
   const [kiwifySaveLoading, setKiwifySaveLoading] = useState(false)
 
+  // AI Ads Generator State
+  const [aiAdsModal, setAiAdsModal] = useState({
+    isOpen: false,
+    loading: false,
+    product: null,
+    customTitle: '',
+    competitorOffer: '',
+    targetAudience: '',
+    tone: 'Direto ao ponto, empático e de alta conversão',
+    result: null,
+    activeAngleTab: 0,
+    saveLoading: false
+  })
+
+  // AI Settings State (OpenAI / Gemini)
+  const [aiSettings, setAiSettings] = useState({
+    has_openai_key: false,
+    has_gemini_key: false,
+    active_engine: 'Motor Neural Nativo de Direct Response (Ativo)'
+  })
+  const [openaiKeyInput, setOpenaiKeyInput] = useState('')
+  const [geminiKeyInput, setGeminiKeyInput] = useState('')
+  const [aiKeySaveLoading, setAiKeySaveLoading] = useState(false)
+
   const showToast = (msg, type = 'success') => {
     setNotification({ msg, type })
     setTimeout(() => setNotification(null), 4000)
@@ -161,7 +185,136 @@ export default function App() {
   useEffect(() => {
     fetchData()
     fetchKiwifyConfig()
+    fetchAiSettings()
   }, [trendNiche])
+
+  const fetchAiSettings = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/ai-ads/settings`)
+      if (res.ok) {
+        const data = await res.json()
+        setAiSettings(data)
+      }
+    } catch (e) {
+      console.error('Erro ao carregar status de IA:', e)
+    }
+  }
+
+  const handleSaveAiKey = async (provider, key) => {
+    if (!key.trim()) {
+      showToast('Por favor, informe a chave de API', 'error')
+      return
+    }
+    setAiKeySaveLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/ai-ads/settings/key`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, api_key: key })
+      })
+      if (res.ok) {
+        showToast(`Chave de API ${provider.toUpperCase()} salva com sucesso!`)
+        fetchAiSettings()
+        if (provider === 'openai') setOpenaiKeyInput('')
+        if (provider === 'gemini') setGeminiKeyInput('')
+      } else {
+        showToast('Erro ao salvar chave de API', 'error')
+      }
+    } catch (e) {
+      showToast('Falha na comunicação com o servidor', 'error')
+    } finally {
+      setAiKeySaveLoading(false)
+    }
+  }
+
+  const handleOpenAiAdsModal = (product = null, defaultOffer = '') => {
+    setAiAdsModal({
+      isOpen: true,
+      loading: false,
+      product: product,
+      customTitle: product?.title || '',
+      competitorOffer: defaultOffer || '',
+      targetAudience: '',
+      tone: 'Direto ao ponto, empático e de alta conversão',
+      result: product?.ad_copies || null,
+      activeAngleTab: 0,
+      saveLoading: false
+    })
+  }
+
+  const handleGenerateAiAds = async () => {
+    const title = aiAdsModal.product?.title || aiAdsModal.customTitle
+    if (!title) {
+      showToast('Informe o título do produto ou selecione um do Kanban', 'error')
+      return
+    }
+    setAiAdsModal(prev => ({ ...prev, loading: true }))
+    try {
+      const res = await fetch(`${API_BASE}/ai-ads/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product_id: aiAdsModal.product?.id || null,
+          product_title: title,
+          niche: aiAdsModal.product?.niche || 'Geral',
+          price: aiAdsModal.product?.price || 27.0,
+          competitor_offer: aiAdsModal.competitorOffer,
+          target_audience: aiAdsModal.targetAudience,
+          tone: aiAdsModal.tone,
+          save_to_product: !!aiAdsModal.product?.id
+        })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setAiAdsModal(prev => ({
+          ...prev,
+          loading: false,
+          result: data,
+          activeAngleTab: 0
+        }))
+        showToast('🚀 3 Variações de anúncios geradas com sucesso!')
+        fetchData()
+      } else {
+        const err = await res.json().catch(() => ({}))
+        showToast(err.detail || 'Erro ao gerar anúncios com IA', 'error')
+        setAiAdsModal(prev => ({ ...prev, loading: false }))
+      }
+    } catch (e) {
+      showToast('Falha na comunicação com a API de IA', 'error')
+      setAiAdsModal(prev => ({ ...prev, loading: false }))
+    }
+  }
+
+  const handleSaveAdsToProduct = async (productId, adsData) => {
+    if (!productId || !adsData) return
+    setAiAdsModal(prev => ({ ...prev, saveLoading: true }))
+    try {
+      const res = await fetch(`${API_BASE}/products/${productId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ad_copies: adsData })
+      })
+      if (res.ok) {
+        showToast('💾 Anúncios salvos no produto!')
+        fetchData()
+      } else {
+        showToast('Erro ao salvar anúncios no produto', 'error')
+      }
+    } catch (e) {
+      showToast('Falha ao salvar', 'error')
+    } finally {
+      setAiAdsModal(prev => ({ ...prev, saveLoading: false }))
+    }
+  }
+
+  const handleCopyText = (text, label) => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(text)
+      showToast(`📋 ${label} copiado!`)
+    } else {
+      showToast('Selecione o texto para copiar', 'info')
+    }
+  }
 
   const fetchKiwifyConfig = async () => {
     try {
@@ -572,6 +725,16 @@ export default function App() {
               <span className="ml-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             ) : null}
           </button>
+
+          <button
+            onClick={() => handleOpenAiAdsModal()}
+            className="ml-auto my-auto flex items-center gap-1.5 py-1.5 px-3.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-purple-600/30 transition active:scale-95 whitespace-nowrap"
+            title="Gerar anúncios a partir de ofertas concorrentes com IA e blindagem contra copyright"
+          >
+            <Lucide.Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+            <span>Criar Anúncios IA</span>
+            <span className="px-1.5 py-0.5 text-[9px] font-bold rounded-full bg-white/20 text-white uppercase tracking-wider">Anti-Plágio</span>
+          </button>
         </div>
       </header>
 
@@ -833,6 +996,15 @@ export default function App() {
                 </button>
 
                 <button
+                  onClick={() => handleOpenAiAdsModal()}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-lg shadow-purple-600/30 transition active:scale-95"
+                  title="Gerar anúncios a partir de ofertas concorrentes com IA e blindagem contra copyright"
+                >
+                  <Lucide.Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                  Gerar Anúncios IA
+                </button>
+
+                <button
                   onClick={() => setIsModalOpen(true)}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30 transition"
                 >
@@ -900,10 +1072,19 @@ export default function App() {
 
                                 <button
                                   onClick={() => handleInspectAds(prod.title, prod.niche)}
-                                  className="w-full flex items-center justify-center gap-1.5 py-1 px-2 mb-2 text-[10px] font-semibold rounded bg-slate-900/80 text-teal-300 border border-teal-900/50 hover:bg-slate-900 transition"
+                                  className="w-full flex items-center justify-center gap-1.5 py-1 px-2 mb-1.5 text-[10px] font-semibold rounded bg-slate-900/80 text-teal-300 border border-teal-900/50 hover:bg-slate-900 transition"
                                 >
                                   <Lucide.Eye className="w-3 h-3" />
                                   Espiar Anúncios Concorrentes
+                                </button>
+
+                                <button
+                                  onClick={() => handleOpenAiAdsModal(prod)}
+                                  className="w-full flex items-center justify-center gap-1.5 py-1 px-2 mb-2 text-[10px] font-semibold rounded bg-purple-950/70 hover:bg-purple-900/80 text-purple-200 border border-purple-800/60 transition shadow-sm"
+                                  title="Gerar ou visualizar anúncios e copys com IA sem risco de copyright"
+                                >
+                                  <Lucide.Sparkles className="w-3 h-3 text-purple-400" />
+                                  {prod.ad_copies ? '📢 Ver 3 Anúncios IA' : '⚡ Criar Anúncios com IA'}
                                 </button>
                               </div>
 
@@ -1600,6 +1781,74 @@ export default function App() {
                     https://alchemylow.shop/api/webhooks/order
                   </div>
                 </div>
+
+                {/* AI ENGINE & COPYRIGHT SHIELD CARD */}
+                <div className="glass-card p-6 rounded-2xl border border-purple-900/40 bg-gradient-to-b from-purple-950/20 to-slate-900/60 shadow-xl">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-heading font-bold text-sm text-white flex items-center gap-2">
+                      <Lucide.Sparkles className="w-4 h-4 text-purple-400" />
+                      Motor de IA & Anti-Copyright
+                    </h4>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-950 text-purple-300 border border-purple-800">
+                      {aiSettings.active_engine}
+                    </span>
+                  </div>
+
+                  <p className="text-xs text-slate-300 mb-4 leading-relaxed">
+                    O gerador já inclui o <strong className="text-white">Motor Neural Nativo</strong> (100% gratuito e pronto).
+                    Para usar modelos LLM avançados (<strong className="text-purple-300">GPT-4o-mini</strong> ou <strong className="text-purple-300">Gemini 1.5</strong>), adicione sua chave abaixo:
+                  </p>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                        <span>OpenAI API Key (Opcional)</span>
+                        {aiSettings.has_openai_key && <span className="text-[10px] text-emerald-400 font-bold">✓ Conectada</span>}
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="password"
+                          placeholder={aiSettings.has_openai_key ? "••••••••••••••••••••••••" : "sk-..."}
+                          value={openaiKeyInput}
+                          onChange={(e) => setOpenaiKeyInput(e.target.value)}
+                          className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 font-mono focus:border-purple-500 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          disabled={aiKeySaveLoading || !openaiKeyInput}
+                          onClick={() => handleSaveAiKey('openai', openaiKeyInput)}
+                          className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs transition"
+                        >
+                          Salvar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                        <span>Google Gemini API Key (Opcional)</span>
+                        {aiSettings.has_gemini_key && <span className="text-[10px] text-emerald-400 font-bold">✓ Conectada</span>}
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="password"
+                          placeholder={aiSettings.has_gemini_key ? "••••••••••••••••••••••••" : "AIzaSy..."}
+                          value={geminiKeyInput}
+                          onChange={(e) => setGeminiKeyInput(e.target.value)}
+                          className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 font-mono focus:border-purple-500 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          disabled={aiKeySaveLoading || !geminiKeyInput}
+                          onClick={() => handleSaveAiKey('gemini', geminiKeyInput)}
+                          className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs transition"
+                        >
+                          Salvar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1663,16 +1912,29 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="pt-2 flex justify-end gap-2">
+                <div className="pt-2 flex flex-col sm:flex-row gap-2">
                   <a
                     href={spyModal.data.ads_library_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs text-center shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2"
+                    className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs text-center transition flex items-center justify-center gap-1.5"
                   >
-                    <span>Abrir na Meta Ads Library (BR)</span>
-                    <Lucide.ExternalLink className="w-3.5 h-3.5" />
+                    <span>Ver na Meta Ads Library</span>
+                    <Lucide.ExternalLink className="w-3.5 h-3.5 text-blue-400" />
                   </a>
+
+                  <button
+                    onClick={() => {
+                      const kw = spyModal.data.keyword
+                      const niche = spyModal.data.niche
+                      setSpyModal({ isOpen: false, loading: false, data: null })
+                      handleOpenAiAdsModal({ title: kw, niche: niche, price: 27.0 }, `Oferta de referência no nicho de ${niche} para o termo "${kw}".`)
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-xs text-center shadow-lg shadow-purple-600/30 transition flex items-center justify-center gap-1.5 active:scale-95"
+                  >
+                    <Lucide.Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                    <span>Gerar Anúncios sem Copyright</span>
+                  </button>
                 </div>
               </div>
             ) : null}
@@ -1774,6 +2036,311 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL: GERADOR DE ANÚNCIOS COM IA (ANTI-COPYRIGHT) */}
+      {aiAdsModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="glass-card max-w-4xl w-full p-6 sm:p-7 rounded-3xl border border-purple-700/50 shadow-2xl bg-slate-900/95 space-y-5 my-auto max-h-[92vh] flex flex-col">
+            
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-purple-950/80 border border-purple-700/50 text-purple-300">
+                    <Lucide.Sparkles className="w-5 h-5 text-yellow-300 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-bold text-lg sm:text-xl text-white flex items-center gap-2">
+                      Gerador de Anúncios com IA (Anti-Copyright)
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Crie campanhas de alta conversão para o Meta Ads reescrevendo ofertas de concorrentes sem risco de plágio.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <button 
+                onClick={() => setAiAdsModal(prev => ({ ...prev, isOpen: false }))}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body (Scrollable) */}
+            <div className="space-y-5 overflow-y-auto pr-1 flex-1">
+              
+              {/* Product & Inputs Form */}
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/80 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Infoproduto de Destino:
+                    </label>
+                    <select
+                      value={aiAdsModal.product?.id || ''}
+                      onChange={(e) => {
+                        const selectedId = parseInt(e.target.value)
+                        const prod = products.find(p => p.id === selectedId) || null
+                        setAiAdsModal(prev => ({
+                          ...prev,
+                          product: prod,
+                          customTitle: prod?.title || prev.customTitle,
+                          result: prod?.ad_copies || prev.result
+                        }))
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-purple-500 focus:outline-none"
+                    >
+                      <option value="">-- Usar Título Personalizado / Sem Vínculo --</option>
+                      {products.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.title} (R$ {p.price.toFixed(2)} - {p.niche})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Preço da Oferta (R$):
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={aiAdsModal.product?.price || 27.00}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 27.00
+                        if (aiAdsModal.product) {
+                          setAiAdsModal(prev => ({
+                            ...prev,
+                            product: { ...prev.product, price: val }
+                          }))
+                        }
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-purple-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {!aiAdsModal.product && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Título do Produto / Assunto:
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Guia Prático: Como Sair das Dívidas em 2026"
+                      value={aiAdsModal.customTitle}
+                      onChange={(e) => setAiAdsModal(prev => ({ ...prev, customTitle: e.target.value }))}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-purple-500 focus:outline-none"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                    <span>Oferta ou Texto do Concorrente (Referência para Reformulação):</span>
+                    <span className="text-[10px] text-purple-300 font-mono">Modificação Anti-Copyright Ativa</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Cole aqui o texto do anúncio concorrente que você viu na Biblioteca da Meta, a promessa da página de vendas ou o gancho... A IA irá desconstruir a dor e criar 3 anúncios 100% inéditos e seguros para o Meta Ads."
+                    value={aiAdsModal.competitorOffer}
+                    onChange={(e) => setAiAdsModal(prev => ({ ...prev, competitorOffer: e.target.value }))}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                  <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <Lucide.ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>Compliance Meta Ads: <strong className="text-white">Sem promessas proibidas</strong></span>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={aiAdsModal.loading}
+                    onClick={handleGenerateAiAds}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-xs shadow-lg shadow-purple-600/30 transition active:scale-95 disabled:opacity-50 ml-auto"
+                  >
+                    <Lucide.Sparkles className={`w-4 h-4 text-yellow-300 ${aiAdsModal.loading ? 'animate-spin' : ''}`} />
+                    {aiAdsModal.loading ? 'Gerando Anúncios com IA...' : 'Gerar 3 Anúncios Anti-Copyright'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Loading State */}
+              {aiAdsModal.loading && (
+                <div className="py-12 text-center space-y-3">
+                  <Lucide.RefreshCw className="w-8 h-8 text-purple-400 animate-spin mx-auto" />
+                  <p className="text-sm font-semibold text-white">Analisando oferta e desconstruindo padrões de copyright...</p>
+                  <p className="text-xs text-slate-400">Criando ganchos magnéticos, legendas completas e roteiros de Stories.</p>
+                </div>
+              )}
+
+              {/* Generated Result Section */}
+              {!aiAdsModal.loading && aiAdsModal.result && (
+                <div className="space-y-4">
+                  
+                  {/* Copyright Shield Banner */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-purple-950/40 to-slate-900 border border-emerald-500/40 text-xs text-slate-300 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                        <Lucide.ShieldCheck className="w-4 h-4 text-emerald-400" />
+                        <span>Escudo Anti-Plágio & Proteção de Copyright</span>
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">
+                        ✓ 100% Inédito & Seguro
+                      </span>
+                    </div>
+                    <p className="text-slate-300 leading-relaxed text-[11px]">
+                      {aiAdsModal.result.copyright_shield?.analyzed_elements}
+                    </p>
+                    <div className="text-[10px] text-slate-400 border-t border-slate-800/80 pt-2 whitespace-pre-line">
+                      {aiAdsModal.result.copyright_shield?.modifications_applied}
+                    </div>
+                  </div>
+
+                  {/* Variations Tabs */}
+                  <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
+                    {aiAdsModal.result.variations?.map((variant, idx) => (
+                      <button
+                        key={variant.id || idx}
+                        onClick={() => setAiAdsModal(prev => ({ ...prev, activeAngleTab: idx }))}
+                        className={`px-3 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap flex items-center gap-1.5 ${
+                          aiAdsModal.activeAngleTab === idx
+                            ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                            : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span>{variant.angle_name?.split(':')[0] || `Variação ${idx + 1}`}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Active Variation Content */}
+                  {(() => {
+                    const activeVariant = aiAdsModal.result.variations?.[aiAdsModal.activeAngleTab] || aiAdsModal.result.variations?.[0]
+                    if (!activeVariant) return null
+                    return (
+                      <div className="space-y-4 p-5 rounded-2xl bg-slate-950/90 border border-slate-800">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-heading font-bold text-sm text-purple-300 flex items-center gap-2">
+                            <span>🎯 {activeVariant.angle_name}</span>
+                          </h4>
+                          <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-400">
+                            CTA: {activeVariant.cta_button || 'Saiba Mais'}
+                          </span>
+                        </div>
+
+                        {/* Hooks */}
+                        <div className="space-y-1.5">
+                          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                            Ganchos de Imagem / Topo do Criativo:
+                          </span>
+                          <div className="grid grid-cols-1 gap-2">
+                            {activeVariant.hooks?.map((hook, hIdx) => (
+                              <div key={hIdx} className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white">
+                                <span>"{hook}"</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyText(hook, 'Gancho')}
+                                  className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-1 flex-shrink-0"
+                                >
+                                  <Lucide.Copy className="w-3 h-3" />
+                                  Copiar
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Primary Text (Feed Copy) */}
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                              Texto Principal (Legenda do Anúncio):
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyText(activeVariant.primary_text, 'Legenda')}
+                              className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1"
+                            >
+                              <Lucide.Copy className="w-3.5 h-3.5" />
+                              Copiar Legenda Completa
+                            </button>
+                          </div>
+                          <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 leading-relaxed whitespace-pre-line font-sans select-all">
+                            {activeVariant.primary_text}
+                          </div>
+                        </div>
+
+                        {/* Stories Script */}
+                        {activeVariant.stories_script && (
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                                Roteiro para Stories / Vídeo Curto (15s):
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText(activeVariant.stories_script, 'Roteiro de Stories')}
+                                className="text-xs text-purple-400 hover:text-purple-300 font-semibold flex items-center gap-1"
+                              >
+                                <Lucide.Copy className="w-3.5 h-3.5" />
+                                Copiar Roteiro
+                              </button>
+                            </div>
+                            <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+                              {activeVariant.stories_script}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Creative Concept */}
+                        {activeVariant.creative_concept && (
+                          <div className="p-3 rounded-xl bg-purple-950/30 border border-purple-800/40 text-xs text-slate-300">
+                            <strong className="text-purple-300 block mb-1">💡 Sugestão Visual do Criativo:</strong>
+                            {activeVariant.creative_concept}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+
+                  {/* Modal Footer Actions */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                    <span className="text-xs text-slate-400">
+                      Anúncios prontos para rodar no Gerenciador da Meta.
+                    </span>
+
+                    <div className="flex items-center gap-2">
+                      {aiAdsModal.product?.id && (
+                        <button
+                          type="button"
+                          disabled={aiAdsModal.saveLoading}
+                          onClick={() => handleSaveAdsToProduct(aiAdsModal.product.id, aiAdsModal.result)}
+                          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/30 transition active:scale-95 disabled:opacity-50"
+                        >
+                          <Lucide.Save className="w-3.5 h-3.5" />
+                          {aiAdsModal.saveLoading ? 'Salvando...' : 'Salvar no Produto'}
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setAiAdsModal(prev => ({ ...prev, isOpen: false }))}
+                        className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                      >
+                        Fechar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
