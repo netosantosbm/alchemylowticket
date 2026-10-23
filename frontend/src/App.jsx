@@ -133,6 +133,16 @@ export default function App() {
   const [geminiKeyInput, setGeminiKeyInput] = useState('')
   const [aiKeySaveLoading, setAiKeySaveLoading] = useState(false)
 
+  // Ebook & Visual Material Generator State
+  const [ebookModal, setEbookModal] = useState({
+    isOpen: false,
+    loading: false,
+    product: null,
+    result: null,
+    activeTab: 'slides', // 'slides' | 'flowchart' | 'chapters' | 'checklist'
+    slideIndex: 0
+  })
+
   const showToast = (msg, type = 'success') => {
     setNotification({ msg, type })
     setTimeout(() => setNotification(null), 4000)
@@ -313,6 +323,48 @@ export default function App() {
       showToast(`📋 ${label} copiado!`)
     } else {
       showToast('Selecione o texto para copiar', 'info')
+    }
+  }
+
+  const handleOpenEbookModal = (product) => {
+    setEbookModal({
+      isOpen: true,
+      loading: !product?.delivery_content,
+      product: product,
+      result: product?.delivery_content || null,
+      activeTab: 'slides',
+      slideIndex: 0
+    })
+    if (!product?.delivery_content && product?.id) {
+      handleGenerateEbook(product.id)
+    }
+  }
+
+  const handleGenerateEbook = async (productId) => {
+    setEbookModal(prev => ({ ...prev, loading: true }))
+    try {
+      const res = await fetch(`${API_BASE}/ebooks/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_id: productId, save_to_product: true })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setEbookModal(prev => ({
+          ...prev,
+          loading: false,
+          result: data,
+          slideIndex: 0
+        }))
+        showToast('📚 Apostila, Slides e Fluxograma gerados com sucesso!')
+        fetchData()
+      } else {
+        showToast('Erro ao gerar apostila com IA', 'error')
+        setEbookModal(prev => ({ ...prev, loading: false }))
+      }
+    } catch (e) {
+      showToast('Falha na requisição com o servidor', 'error')
+      setEbookModal(prev => ({ ...prev, loading: false }))
     }
   }
 
@@ -1080,11 +1132,20 @@ export default function App() {
 
                                 <button
                                   onClick={() => handleOpenAiAdsModal(prod)}
-                                  className="w-full flex items-center justify-center gap-1.5 py-1 px-2 mb-2 text-[10px] font-semibold rounded bg-purple-950/70 hover:bg-purple-900/80 text-purple-200 border border-purple-800/60 transition shadow-sm"
+                                  className="w-full flex items-center justify-center gap-1.5 py-1 px-2 mb-1.5 text-[10px] font-semibold rounded bg-purple-950/70 hover:bg-purple-900/80 text-purple-200 border border-purple-800/60 transition shadow-sm"
                                   title="Gerar ou visualizar anúncios e copys com IA sem risco de copyright"
                                 >
                                   <Lucide.Sparkles className="w-3 h-3 text-purple-400" />
                                   {prod.ad_copies ? '📢 Ver 3 Anúncios IA' : '⚡ Criar Anúncios com IA'}
+                                </button>
+
+                                <button
+                                  onClick={() => handleOpenEbookModal(prod)}
+                                  className="w-full flex items-center justify-center gap-1.5 py-1 px-2 mb-2 text-[10px] font-semibold rounded bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800/60 transition shadow-sm"
+                                  title="Gerar e visualizar Apostila com Slides de Estudo e Fluxograma com IA"
+                                >
+                                  <Lucide.BookOpen className="w-3 h-3 text-emerald-400" />
+                                  {prod.delivery_content ? '📖 Ver Apostila & Slides' : '✨ Gerar Apostila & Slides'}
                                 </button>
                               </div>
 
@@ -2340,6 +2401,313 @@ export default function App() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL: VISUALIZADOR & GERADOR DE APOSTILA COM SLIDES & FLUXOGRAMA */}
+      {ebookModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="glass-card max-w-5xl w-full p-6 sm:p-7 rounded-3xl border border-emerald-600/50 shadow-2xl bg-slate-900/95 space-y-5 my-auto max-h-[92vh] flex flex-col">
+            
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-emerald-950/80 border border-emerald-600/50 text-emerald-300">
+                  <Lucide.BookOpen className="w-6 h-6 text-emerald-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-heading font-bold text-lg sm:text-xl text-white">
+                      {ebookModal.result?.meta?.title || ebookModal.product?.title || 'Apostila & Guia Visual'}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                      Pronto para Entrega
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Apostila didática esquematizada com Slides de Orientação de Estudos e Fluxograma em 4 Fases.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {ebookModal.product?.id && (
+                  <a
+                    href={`/api/ebooks/render/${ebookModal.product.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/30 transition"
+                    title="Abre a versão de alta resolução para impressão limpa em PDF"
+                  >
+                    <Lucide.Printer className="w-3.5 h-3.5" />
+                    <span>Salvar em PDF</span>
+                  </a>
+                )}
+
+                {ebookModal.product?.id && (
+                  <button
+                    onClick={() => {
+                      const fullUrl = `https://alchemylow.shop/api/ebooks/render/${ebookModal.product.id}`
+                      navigator.clipboard.writeText(fullUrl)
+                      showToast('🔗 Link de entrega copiado! Cole na Kiwify.')
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs transition"
+                    title="Copiar URL para colocar como Link de Entrega na Kiwify"
+                  >
+                    <Lucide.Copy className="w-3.5 h-3.5 text-teal-400" />
+                    <span>Copiar Link da Kiwify</span>
+                  </button>
+                )}
+
+                <button 
+                  onClick={() => setEbookModal(prev => ({ ...prev, isOpen: false }))}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition ml-2"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="space-y-5 overflow-y-auto pr-1 flex-1">
+              
+              {/* Loading State */}
+              {ebookModal.loading && (
+                <div className="py-16 text-center space-y-3">
+                  <Lucide.RefreshCw className="w-10 h-10 text-emerald-400 animate-spin mx-auto" />
+                  <p className="text-base font-semibold text-white">Gerando Apostila, Slides e Fluxograma com IA...</p>
+                  <p className="text-xs text-slate-400">Esquematizando resumos, caixas de dicas de ouro e cronograma em 4 fases.</p>
+                </div>
+              )}
+
+              {!ebookModal.loading && ebookModal.result && (
+                <>
+                  {/* Navigation Tabs */}
+                  <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
+                    {[
+                      { id: 'slides', label: '🖥️ Slides de Estudo (Onboarding)', count: ebookModal.result.study_slides?.length },
+                      { id: 'flowchart', label: '🗺️ Fluxograma em 4 Fases', count: ebookModal.result.study_flowchart?.length },
+                      { id: 'chapters', label: '📄 Capítulos Didáticos', count: ebookModal.result.chapters?.length },
+                      { id: 'checklist', label: '✅ Checklist de Acompanhamento', count: ebookModal.result.study_checklist?.length }
+                    ].map(tab => (
+                      <button
+                        key={tab.id}
+                        onClick={() => setEbookModal(prev => ({ ...prev, activeTab: tab.id }))}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition whitespace-nowrap flex items-center gap-1.5 ${
+                          ebookModal.activeTab === tab.id
+                            ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
+                            : 'bg-slate-800/80 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        {tab.count !== undefined && (
+                          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-black/30">
+                            {tab.count}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* TAB 1: SLIDES DO MÉTODO */}
+                  {ebookModal.activeTab === 'slides' && (
+                    <div className="p-6 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-4">
+                      {(() => {
+                        const slides = ebookModal.result.study_slides || []
+                        const slide = slides[ebookModal.slideIndex] || slides[0]
+                        if (!slide) return null
+                        return (
+                          <div>
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider bg-emerald-950 text-emerald-300 border border-emerald-800">
+                                Slide {ebookModal.slideIndex + 1} de {slides.length}
+                              </span>
+                              <span className="text-xs text-slate-400">
+                                Guia de Estudos Acelerado
+                              </span>
+                            </div>
+
+                            <h3 className="font-heading font-bold text-lg text-white mb-2">
+                              {slide.title}
+                            </h3>
+                            <p className="text-xs text-slate-300 leading-relaxed mb-4">
+                              {slide.description}
+                            </p>
+
+                            <div className="space-y-2 mb-6">
+                              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                                Pontos Principais:
+                              </span>
+                              <ul className="space-y-1.5">
+                                {slide.key_points?.map((pt, pIdx) => (
+                                  <li key={pIdx} className="flex items-center gap-2 text-xs text-slate-300">
+                                    <span className="text-emerald-400 font-bold">✓</span>
+                                    <span>{pt}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            <div className="flex items-center justify-between pt-4 border-t border-slate-800/80">
+                              <button
+                                disabled={ebookModal.slideIndex === 0}
+                                onClick={() => setEbookModal(prev => ({ ...prev, slideIndex: Math.max(0, prev.slideIndex - 1) }))}
+                                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-xs font-semibold text-slate-300 transition"
+                              >
+                                ← Slide Anterior
+                              </button>
+                              <div className="flex gap-1.5">
+                                {slides.map((_, sIdx) => (
+                                  <div
+                                    key={sIdx}
+                                    onClick={() => setEbookModal(prev => ({ ...prev, slideIndex: sIdx }))}
+                                    className={`w-2.5 h-2.5 rounded-full cursor-pointer transition ${
+                                      sIdx === ebookModal.slideIndex ? 'bg-emerald-400 scale-110' : 'bg-slate-700'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                              <button
+                                disabled={ebookModal.slideIndex === slides.length - 1}
+                                onClick={() => setEbookModal(prev => ({ ...prev, slideIndex: Math.min(slides.length - 1, prev.slideIndex + 1) }))}
+                                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-xs font-semibold text-slate-300 transition"
+                              >
+                                Próximo Slide →
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  )}
+
+                  {/* TAB 2: FLUXOGRAMA DE ESTUDOS */}
+                  {ebookModal.activeTab === 'flowchart' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {ebookModal.result.study_flowchart?.map((phase, pIdx) => (
+                        <div key={pIdx} className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-2 hover:border-emerald-600/40 transition">
+                          <div className="flex items-center justify-between">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-950 text-purple-300 border border-purple-800">
+                              Fase {phase.phase_number || pIdx + 1}
+                            </span>
+                            <span className="text-xs font-semibold text-emerald-400">
+                              {phase.timeframe}
+                            </span>
+                          </div>
+                          <h4 className="font-heading font-bold text-sm text-white">
+                            {phase.title}
+                          </h4>
+                          <p className="text-xs text-slate-400">
+                            {phase.objective}
+                          </p>
+                          <div className="pt-2 border-t border-slate-800/80">
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">
+                              Passos de Ação:
+                            </span>
+                            <ul className="space-y-1">
+                              {phase.action_steps?.map((step, sIdx) => (
+                                <li key={sIdx} className="text-xs text-slate-300 flex items-start gap-1.5">
+                                  <span className="text-emerald-400">➔</span>
+                                  <span>{step}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* TAB 3: CAPÍTULOS DIDÁTICOS */}
+                  {ebookModal.activeTab === 'chapters' && (
+                    <div className="space-y-4">
+                      {ebookModal.result.chapters?.map((chap, cIdx) => (
+                        <div key={cIdx} className="p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
+                          <h4 className="font-heading font-bold text-base text-white">
+                            {chap.title}
+                          </h4>
+                          <p className="text-xs text-slate-400 italic border-b border-slate-800 pb-2">
+                            {chap.summary}
+                          </p>
+                          <div className="space-y-3 pt-1">
+                            {chap.sections?.map((sec, sIdx) => (
+                              <div key={sIdx} className="space-y-2">
+                                <h5 className="font-semibold text-xs text-emerald-300">
+                                  {sec.section_title}
+                                </h5>
+                                {sec.content_paragraphs?.map((p, pIdx) => (
+                                  <p key={pIdx} className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+                                    {p}
+                                  </p>
+                                ))}
+                                {sec.tip_box && (
+                                  <div className="p-2.5 rounded-xl bg-emerald-950/40 border-l-4 border-emerald-500 text-xs text-emerald-200">
+                                    💡 <strong>Dica de Ouro:</strong> {sec.tip_box}
+                                  </div>
+                                )}
+                                {sec.warning_box && (
+                                  <div className="p-2.5 rounded-xl bg-amber-950/40 border-l-4 border-amber-500 text-xs text-amber-200">
+                                    ⚠️ <strong>Cuidado:</strong> {sec.warning_box}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* TAB 4: CHECKLIST */}
+                  {ebookModal.activeTab === 'checklist' && (
+                    <div className="p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
+                      <h4 className="font-heading font-bold text-sm text-white">
+                        Checklist de Conclusão & Acompanhamento
+                      </h4>
+                      <p className="text-xs text-slate-400">
+                        Marque cada etapa conforme você ou seus alunos concluem o estudo:
+                      </p>
+                      <div className="space-y-2 pt-2">
+                        {ebookModal.result.study_checklist?.map((item, idx) => (
+                          <label key={idx} className="flex items-start gap-2.5 p-2 rounded-xl bg-slate-900 border border-slate-800/80 text-xs text-slate-200 cursor-pointer hover:bg-slate-800/60 transition">
+                            <input type="checkbox" className="mt-0.5 accent-emerald-500 cursor-pointer" />
+                            <span>{item}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+              <span className="text-xs text-slate-400">
+                Material visual estruturado pronto para entrega aos alunos.
+              </span>
+
+              <div className="flex items-center gap-2">
+                {ebookModal.product?.id && (
+                  <button
+                    type="button"
+                    onClick={() => handleGenerateEbook(ebookModal.product.id)}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+                  >
+                    <Lucide.RefreshCw className="w-3.5 h-3.5" />
+                    Regenerar com IA
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setEbookModal(prev => ({ ...prev, isOpen: false }))}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                >
+                  Fechar
+                </button>
+              </div>
             </div>
           </div>
         </div>

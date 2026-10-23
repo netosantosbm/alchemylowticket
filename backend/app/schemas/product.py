@@ -14,6 +14,7 @@ class ProductBase(BaseModel):
     delivery_url: Optional[str] = None
     status: ProductStatus = ProductStatus.IDEA
     ad_copies: Optional[dict] = None
+    delivery_content: Optional[dict] = None
     trend_id: Optional[int] = None
 
 class ProductCreate(ProductBase):
@@ -29,6 +30,7 @@ class ProductUpdate(BaseModel):
     delivery_url: Optional[str] = None
     status: Optional[ProductStatus] = None
     ad_copies: Optional[dict] = None
+    delivery_content: Optional[dict] = None
     trend_id: Optional[int] = None
 
 class ProductResponse(ProductBase):
