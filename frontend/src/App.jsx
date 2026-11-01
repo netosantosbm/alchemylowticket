@@ -67,11 +67,30 @@ export default function App() {
   const [miningLoading, setMiningLoading] = useState(false)
 
   // Meta Ads Modal & Spy State
-  const [spyModal, setSpyModal] = useState({ isOpen: false, loading: false, data: null })
+  const [spyModal, setSpyModal] = useState({ isOpen: false, loading: false, data: null, product: null, trendId: null, niche: 'Geral' })
+  const [spySearchTerm, setSpySearchTerm] = useState('')
+  const [spyActiveStatus, setSpyActiveStatus] = useState('all') // 'all' (completo) | 'active'
+  const [spyCompetitorUrlInput, setSpyCompetitorUrlInput] = useState('')
+  const [isSavingCompetitorUrl, setIsSavingCompetitorUrl] = useState(false)
   const [customSpyQuery, setCustomSpyQuery] = useState('')
   const [customSpyNiche, setCustomSpyNiche] = useState('Concursos')
   const [customSpyResult, setCustomSpyResult] = useState(null)
   const [customSpyLoading, setCustomSpyLoading] = useState(false)
+
+  const buildMetaAdsLibraryUrl = (term, activeStatus = 'all') => {
+    if (!term || !term.trim()) return 'https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=BR&media_type=all'
+    const trimmed = term.trim()
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed
+    const params = new URLSearchParams({
+      active_status: activeStatus,
+      ad_type: 'all',
+      country: 'BR',
+      q: trimmed,
+      search_type: 'keyword_unordered',
+      media_type: 'all'
+    })
+    return `https://www.facebook.com/ads/library/?${params.toString()}`
+  }
 
   // New Product Modal State
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -492,13 +511,34 @@ export default function App() {
     }
   }
 
-  const handleInspectAds = async (keyword, niche, trendId = null) => {
-    setSpyModal({ isOpen: true, loading: true, data: null })
+  const handleInspectAds = async (keyword, niche, trendId = null, product = null) => {
+    const initialTerm = product?.origin_trend_keyword || keyword || ''
+    setSpyModal({
+      isOpen: true,
+      loading: true,
+      data: null,
+      product: product || null,
+      trendId: trendId || null,
+      niche: niche || 'Geral'
+    })
+    setSpyActiveStatus('all')
+    const existingCompUrl = product?.competitor_url || product?.ad_copies?.competitor_url || product?.ad_copies?.meta_ads_url || ''
+    setSpyCompetitorUrlInput(existingCompUrl)
+
     try {
-      const url = `${API_BASE}/competitors/analyze?keyword=${encodeURIComponent(keyword)}&niche=${encodeURIComponent(niche)}`
+      const url = `${API_BASE}/competitors/analyze?keyword=${encodeURIComponent(initialTerm)}&niche=${encodeURIComponent(niche || 'Geral')}`
       const res = await fetch(url)
       const data = await res.json()
-      setSpyModal({ isOpen: true, loading: false, data })
+      setSpySearchTerm(data.clean_keyword || initialTerm)
+      setSpyModal(prev => ({
+        ...prev,
+        isOpen: true,
+        loading: false,
+        data,
+        product: product || null,
+        trendId: trendId || null,
+        niche: niche || 'Geral'
+      }))
 
       // Persist to Supabase if trendId is supplied
       if (trendId) {
@@ -506,7 +546,58 @@ export default function App() {
       }
     } catch (e) {
       showToast('Erro ao analisar concorrência na Meta', 'error')
-      setSpyModal({ isOpen: false, loading: false, data: null })
+      setSpyModal({ isOpen: false, loading: false, data: null, product: null, trendId: null, niche: 'Geral' })
+    }
+  }
+
+  const handleRefineSpySearch = async (newTerm) => {
+    if (!newTerm || !newTerm.trim()) return
+    setSpyModal(prev => ({ ...prev, loading: true }))
+    try {
+      const url = `${API_BASE}/competitors/analyze?keyword=${encodeURIComponent(newTerm)}&niche=${encodeURIComponent(spyModal.niche || 'Geral')}`
+      const res = await fetch(url)
+      const data = await res.json()
+      setSpySearchTerm(data.clean_keyword || newTerm)
+      setSpyModal(prev => ({ ...prev, loading: false, data }))
+    } catch (e) {
+      showToast('Erro ao atualizar pesquisa da Meta', 'error')
+      setSpyModal(prev => ({ ...prev, loading: false }))
+    }
+  }
+
+  const handleSaveProductCompetitorUrl = async () => {
+    if (!spyModal.product?.id) {
+      showToast('Nenhum infoproduto selecionado para salvar este link.', 'info')
+      return
+    }
+    setIsSavingCompetitorUrl(true)
+    try {
+      const prodId = spyModal.product.id
+      const currentCopies = spyModal.product.ad_copies || {}
+      const updatedCopies = {
+        ...currentCopies,
+        competitor_url: spyCompetitorUrlInput.trim(),
+        meta_ads_url: spyCompetitorUrlInput.trim()
+      }
+      const res = await fetch(`${API_BASE}/products/${prodId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ad_copies: updatedCopies })
+      })
+      if (res.ok) {
+        showToast('Link do concorrente salvo no produto com sucesso!')
+        setSpyModal(prev => ({
+          ...prev,
+          product: { ...prev.product, competitor_url: spyCompetitorUrlInput.trim(), ad_copies: updatedCopies }
+        }))
+        fetchData()
+      } else {
+        showToast('Falha ao salvar link do concorrente', 'error')
+      }
+    } catch (e) {
+      showToast('Erro ao conectar com servidor', 'error')
+    } finally {
+      setIsSavingCompetitorUrl(false)
     }
   }
 
@@ -1125,8 +1216,21 @@ export default function App() {
                                   </div>
                                 )}
 
+                                {prod.competitor_url && (
+                                  <a
+                                    href={prod.competitor_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="w-full flex items-center justify-center gap-1.5 py-1 px-2 mb-1.5 text-[10px] font-semibold rounded bg-blue-950/70 text-blue-300 border border-blue-800/60 hover:bg-blue-900 transition shadow-sm"
+                                    title="Abrir o anúncio concorrente vinculado diretamente"
+                                  >
+                                    <Lucide.ExternalLink className="w-3 h-3 text-blue-400" />
+                                    Ver Oferta Concorrente Salva
+                                  </a>
+                                )}
+
                                 <button
-                                  onClick={() => handleInspectAds(prod.title, prod.niche)}
+                                  onClick={() => handleInspectAds(prod.origin_trend_keyword || prod.title, prod.niche, prod.trend_id, prod)}
                                   className="w-full flex items-center justify-center gap-1.5 py-1 px-2 mb-1.5 text-[10px] font-semibold rounded bg-slate-900/80 text-teal-300 border border-teal-900/50 hover:bg-slate-900 transition"
                                 >
                                   <Lucide.Eye className="w-3 h-3" />
@@ -1922,15 +2026,15 @@ export default function App() {
       {/* MODAL: ESPIÃO DE ANÚNCIOS (POPUP) */}
       {spyModal.isOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-card max-w-xl w-full p-6 rounded-2xl border border-slate-700 shadow-2xl space-y-4">
+          <div className="glass-card max-w-xl w-full p-6 rounded-2xl border border-slate-700 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
                 <Lucide.Eye className="w-5 h-5 text-teal-400" />
                 <h3 className="font-heading font-bold text-lg text-white">Espião de Anúncios na Meta</h3>
               </div>
               <button 
-                onClick={() => setSpyModal({ isOpen: false, loading: false, data: null })}
-                className="text-slate-400 hover:text-white p-1"
+                onClick={() => setSpyModal({ isOpen: false, loading: false, data: null, product: null, trendId: null, niche: 'Geral' })}
+                className="text-slate-400 hover:text-white p-1 text-base leading-none"
               >
                 ✕
               </button>
@@ -1943,17 +2047,139 @@ export default function App() {
               </div>
             ) : spyModal.data ? (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-white text-base">{spyModal.data.keyword}</span>
-                  <span className="px-3 py-0.5 rounded-full text-xs font-bold bg-emerald-950 text-emerald-300 border border-emerald-700">
+                {/* Identificação da Oferta */}
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="text-[11px] text-teal-400 font-semibold uppercase tracking-wider block">Oferta Analisada</span>
+                    <h4 className="font-bold text-white text-base leading-tight">
+                      {spyModal.product?.title || spyModal.data.keyword}
+                    </h4>
+                  </div>
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-950 text-emerald-300 border border-emerald-700 flex-shrink-0">
                     {spyModal.data.competition_level}
                   </span>
                 </div>
 
+                {/* Seção: Busca Direta e Otimizada na Meta Ads */}
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Lucide.Search className="w-3.5 h-3.5 text-teal-400" />
+                      Termo na Meta Ads Library:
+                    </span>
+                    <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setSpyActiveStatus('all')}
+                        className={`px-2 py-0.5 rounded transition ${spyActiveStatus === 'all' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400 hover:text-white'}`}
+                        title="Histórico Completo (Recomendado para não perder criativos que pausaram recentemente)"
+                      >
+                        Histórico Completo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSpyActiveStatus('active')}
+                        className={`px-2 py-0.5 rounded transition ${spyActiveStatus === 'active' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800 font-semibold' : 'text-slate-400 hover:text-white'}`}
+                        title="Apenas campanhas ativas neste segundo"
+                      >
+                        Apenas Ativos
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={spySearchTerm}
+                      onChange={(e) => setSpySearchTerm(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          handleRefineSpySearch(spySearchTerm)
+                        }
+                      }}
+                      placeholder="Termo limpo de pesquisa (ex: Planner Financeiro Notion)"
+                      className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRefineSpySearch(spySearchTerm)}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-teal-300 border border-slate-700 rounded-lg text-xs font-semibold transition"
+                    >
+                      Filtrar
+                    </button>
+                  </div>
+
+                  {/* Sugestões de Termos Diretos */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <span className="text-[10px] text-slate-500">Atalhos rápidos:</span>
+                    {spyModal.data.clean_keyword && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSpySearchTerm(spyModal.data.clean_keyword)
+                          handleRefineSpySearch(spyModal.data.clean_keyword)
+                        }}
+                        className={`text-[11px] px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+                          spySearchTerm === spyModal.data.clean_keyword
+                            ? 'bg-teal-950 text-teal-300 border-teal-700 font-semibold'
+                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        <span>🎯 Foco da Oferta:</span>
+                        <strong className="text-white">{spyModal.data.clean_keyword}</strong>
+                      </button>
+                    )}
+                    {spyModal.data.broad_keyword && spyModal.data.broad_keyword !== spyModal.data.clean_keyword && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSpySearchTerm(spyModal.data.broad_keyword)
+                          handleRefineSpySearch(spyModal.data.broad_keyword)
+                        }}
+                        className={`text-[11px] px-2 py-0.5 rounded border transition flex items-center gap-1 ${
+                          spySearchTerm === spyModal.data.broad_keyword
+                            ? 'bg-blue-950 text-blue-300 border-blue-700 font-semibold'
+                            : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                        }`}
+                      >
+                        <span>🌐 Mercado Amplo:</span>
+                        <strong className="text-white">{spyModal.data.broad_keyword}</strong>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Oferta Concorrente Vinculada (se existir) */}
+                {(spyModal.product?.competitor_url || spyModal.product?.ad_copies?.meta_ads_url) && (
+                  <div className="p-3 rounded-xl bg-blue-950/40 border border-blue-800/60 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="text-[11px] font-semibold text-blue-300 block mb-0.5 flex items-center gap-1.5">
+                        <Lucide.CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
+                        Anúncio Concorrente Específico Vinculado
+                      </span>
+                      <span className="text-[11px] text-slate-400 truncate block font-mono">
+                        {spyModal.product?.competitor_url || spyModal.product?.ad_copies?.meta_ads_url}
+                      </span>
+                    </div>
+                    <a
+                      href={spyModal.product?.competitor_url || spyModal.product?.ad_copies?.meta_ads_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs whitespace-nowrap flex items-center gap-1.5 transition active:scale-95 shadow-lg shadow-blue-600/30"
+                    >
+                      <span>Abrir Anúncio Exato</span>
+                      <Lucide.ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                )}
+
+                {/* Diagnóstico */}
                 <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 leading-relaxed">
                   💡 <strong className="text-white">Diagnóstico:</strong> {spyModal.data.verdict}
                 </div>
 
+                {/* Métricas Estimadas */}
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
                     <span className="text-slate-400 block mb-1">Ticket Médio Sugerido</span>
@@ -1965,6 +2191,7 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Ângulos de Copy */}
                 <div className="space-y-1.5">
                   <span className="text-xs font-semibold text-slate-400">Ângulos de Copy Sugeridos:</span>
                   <div className="flex flex-wrap gap-1.5">
@@ -1976,22 +2203,55 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Vincular Link do Anúncio Campeão (Se for produto) */}
+                {spyModal.product && (
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+                        <Lucide.Link className="w-3.5 h-3.5 text-blue-400" />
+                        Fixar Link Direto do Anúncio Concorrente (Opcional):
+                      </label>
+                      {spyModal.product.competitor_url && (
+                        <span className="text-[10px] text-emerald-400 font-medium">✓ Vinculado</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="url"
+                        value={spyCompetitorUrlInput}
+                        onChange={(e) => setSpyCompetitorUrlInput(e.target.value)}
+                        placeholder="Cole o link do anúncio ou da página do concorrente"
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-blue-500 placeholder-slate-600"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveProductCompetitorUrl}
+                        disabled={isSavingCompetitorUrl || !spyCompetitorUrlInput.trim()}
+                        className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold text-xs transition"
+                      >
+                        {isSavingCompetitorUrl ? 'Salvando...' : 'Salvar Link'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Botões de Ação */}
                 <div className="pt-2 flex flex-col sm:flex-row gap-2">
                   <a
-                    href={spyModal.data.ads_library_url}
+                    href={buildMetaAdsLibraryUrl(spySearchTerm, spyActiveStatus)}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold text-xs text-center transition flex items-center justify-center gap-1.5"
+                    className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs text-center shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-1.5 active:scale-95"
                   >
                     <span>Ver na Meta Ads Library</span>
-                    <Lucide.ExternalLink className="w-3.5 h-3.5 text-blue-400" />
+                    <Lucide.ExternalLink className="w-3.5 h-3.5" />
                   </a>
 
                   <button
                     onClick={() => {
-                      const kw = spyModal.data.keyword
+                      const kw = spyModal.data.clean_keyword || spyModal.data.keyword
                       const niche = spyModal.data.niche
-                      setSpyModal({ isOpen: false, loading: false, data: null })
+                      setSpyModal({ isOpen: false, loading: false, data: null, product: null, trendId: null, niche: 'Geral' })
                       handleOpenAiAdsModal({ title: kw, niche: niche, price: 27.0 }, `Oferta de referência no nicho de ${niche} para o termo "${kw}".`)
                     }}
                     className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-xs text-center shadow-lg shadow-purple-600/30 transition flex items-center justify-center gap-1.5 active:scale-95"

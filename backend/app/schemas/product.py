@@ -39,6 +39,8 @@ class ProductResponse(ProductBase):
     updated_at: Optional[datetime] = None
     total_sales: Optional[int] = 0
     total_revenue: Optional[float] = 0.0
+    origin_trend_keyword: Optional[str] = None
+    competitor_url: Optional[str] = None
 
     class Config:
         from_attributes = True

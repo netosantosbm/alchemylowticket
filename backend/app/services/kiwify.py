@@ -94,8 +94,29 @@ class KiwifyService:
                         # Se veio em centavos (ex: 3700 para R$ 37,00)
                         price_val = price_val / 100.0
 
+                    prod_id = p.get("id")
+                    # Se faltou checkout ou preço (comum na listagem resumida da Kiwify API), busca os detalhes do produto
+                    if prod_id and (not checkout or price_val == 0.0):
+                        try:
+                            det_res = await client.get(f"{KIWIFY_API_BASE}/products/{prod_id}", headers=headers)
+                            if det_res.status_code == 200:
+                                det_data = det_res.json()
+                                links = det_data.get("links", [])
+                                for lk in links:
+                                    if not lk.get("is_sales_page") and lk.get("id"):
+                                        checkout = f"https://pay.kiwify.com.br/{lk['id']}"
+                                        if lk.get("price") and price_val == 0.0:
+                                            price_val = lk.get("price") / 100.0
+                                        break
+                                if price_val == 0.0 and det_data.get("offers"):
+                                    first_offer = det_data["offers"][0]
+                                    if first_offer.get("price"):
+                                        price_val = first_offer.get("price") / 100.0
+                        except Exception as det_err:
+                            logger.warning(f"Erro ao buscar detalhes da Kiwify para {prod_id}: {det_err}")
+
                     cleaned_products.append({
-                        "kiwify_id": p.get("id"),
+                        "kiwify_id": prod_id,
                         "title": p.get("name") or p.get("title") or "Produto Kiwify",
                         "price": float(price_val),
                         "checkout_url": checkout,
@@ -132,20 +153,33 @@ class KiwifyService:
 
             if existing:
                 # Atualiza link de checkout se não tiver
-                if not existing.checkout_url and checkout:
-                    existing.checkout_url = checkout
                 if checkout:
                     existing.checkout_url = checkout
-                if price > 0 and (existing.price == 0 or existing.price is None):
+                    if existing.status == ProductStatus.IDEA:
+                        existing.status = ProductStatus.READY
+                if price > 0 and (existing.price == 0 or existing.price is None or existing.price == Decimal("37.00")):
                     existing.price = price
                 updated_count += 1
             else:
-                # Cria novo produto diretamente no Kanban
+                # Dedução inteligente do nicho baseado no título
+                lower_t = title.lower()
+                if any(k in lower_t for k in ["colorir", "desenho", "criança", "infantil", "fauna", "amigurumi", "artesanato"]):
+                    inferred_niche = "Infantil & Hobbies"
+                elif any(k in lower_t for k in ["concurso", "oab", "enem", "prova", "apostila"]):
+                    inferred_niche = "Concursos & Carreiras"
+                elif any(k in lower_t for k in ["finan", "invest", "renda", "dinheiro", "planilha"]):
+                    inferred_niche = "Finanças & Produtividade"
+                elif any(k in lower_t for k in ["saude", "dieta", "emagrec", "treino"]):
+                    inferred_niche = "Saúde & Bem-estar"
+                else:
+                    inferred_niche = "Geral"
+
                 slug = title.lower().replace(" ", "-").replace("/", "-")
                 new_prod = Product(
                     title=title,
                     slug=slug[:100],
-                    price=price if price > 0 else Decimal("37.00"),
+                    niche=inferred_niche,
+                    price=price if price > 0 else Decimal("9.90"),
                     checkout_url=checkout if checkout else None,
                     status=ProductStatus.READY if checkout else ProductStatus.IDEA
                 )
