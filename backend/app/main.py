@@ -8,6 +8,7 @@ from models import (
     MarketTrend,
     Product,
     Order,
+    AppSetting,
     TrendStatus,
     ProductStatus,
     Platform,
